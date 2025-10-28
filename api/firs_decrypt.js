@@ -1,56 +1,94 @@
 import crypto from "crypto";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  // 🔒 Validate headers from UniFi
-  const apiKeyHeader = req.headers["x-api-key"];
-  const apiSecretHeader = req.headers["x-api-secret"];
-
-  if (
-    apiKeyHeader !== process.env.FIRS_API_KEY ||
-    apiSecretHeader !== process.env.FIRS_CLIENT_SECRET
-  ) {
-    return res.status(401).json({ error: "Unauthorized request" });
-  }
-
   try {
-    const { ciphertext, pub, iv_key } = req.body;
+    // ✅ 1. Allow only POST requests
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
 
-    // ✅ Get the actual API key from environment (not from request)
-    const firsApiKey = process.env.FIRS_API_KEY;
+    // ✅ 2. Extract credentials from UniFi body (or fallback to headers)
+    const { RequestHeaders } = req.body || {};
+    const apiKeyFromBody = RequestHeaders?.["x-api-key"];
+    const apiSecretFromBody = RequestHeaders?.["x-api-secret"];
 
-    // Build the decryption key according to FIRS spec
-    const firstSegment = firsApiKey.split("-")[0];
-    const keyString = pub + firstSegment;
-    const key = Buffer.from(keyString, "utf8");
+    const apiKey =
+      apiKeyFromBody || req.headers["x-api-key"] || process.env.FIRS_API_KEY;
+    const apiSecret =
+      apiSecretFromBody ||
+      req.headers["x-api-secret"] ||
+      process.env.FIRS_CLIENT_SECRET;
 
-    // Convert IV from hex
-    const iv = Buffer.from(iv_key, "hex");
+    // ✅ 3. Validate the API credentials
+    if (!apiKey || !apiSecret) {
+      return res.status(401).json({ error: "Missing credentials" });
+    }
 
-    // Decode Base64URL ciphertext
-    const ciphertextBytes = Buffer.from(ciphertext, "base64url");
+    if (apiKey !== process.env.FIRS_API_KEY) {
+      return res.status(401).json({ error: "Unauthorized request" });
+    }
 
-    // Perform AES-256-CFB decryption
-    const decipher = crypto.createDecipheriv("aes-256-cfb", key, iv);
+    // ✅ 4. Parse FIRS Content string
+    const { Content } = req.body;
+
+    if (!Content) {
+      return res.status(400).json({ error: "Missing Content field" });
+    }
+
+    let contentJson;
+    try {
+      contentJson = JSON.parse(Content);
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid Content JSON format" });
+    }
+
+    // ✅ 5. Extract actual data for decryption
+    const firsData = contentJson.data || {};
+    const ivHex = firsData.iv_hex;
+    const pub = firsData.pub;
+    const ciphertext = firsData.data; // ciphertext lives here
+
+    if (!ivHex || !pub || !ciphertext) {
+      return res.status(400).json({
+        error: "Missing iv_hex, pub or ciphertext in Content.data",
+      });
+    }
+
+    // ✅ 6. Build decryption key
+    const apiKeyPrefix = process.env.FIRS_API_KEY.split("-")[0];
+    const decryptionKey = pub + apiKeyPrefix;
+
+    // ✅ 7. Convert IV from hex to bytes
+    const iv = Buffer.from(ivHex, "hex");
+
+    // ✅ 8. Decrypt using AES-256-CFB
+    const decipher = crypto.createDecipheriv(
+      "aes-256-cfb",
+      Buffer.from(decryptionKey),
+      iv
+    );
+
     const decrypted = Buffer.concat([
-      decipher.update(ciphertextBytes),
+      decipher.update(Buffer.from(ciphertext, "base64url")),
       decipher.final(),
     ]);
+
     const decryptedText = decrypted.toString("utf8");
 
-    // Return the decrypted result
-    return res.status(200).json({
-      success: true,
-      decryptedText,
-    });
-  } catch (error) {
-    console.error("Decryption error:", error);
+    // ✅ 9. Return decrypted text (parsed if JSON)
+    let parsed;
+    try {
+      parsed = JSON.parse(decryptedText);
+    } catch {
+      parsed = decryptedText;
+    }
+
+    return res.status(200).json({ decrypted: parsed });
+  } catch (err) {
+    console.error("Decryption error:", err);
     return res.status(500).json({
       error: "Decryption failed",
-      details: error.message,
+      details: err.message,
     });
   }
 }
