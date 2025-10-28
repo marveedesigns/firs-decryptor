@@ -1,0 +1,12 @@
+{
+  "name": "firs_decrypt",
+  "version": "1.0.0",
+  "engines": {
+    "node": "18.x"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "type": "module",
+  "license": "ISC"
+}
