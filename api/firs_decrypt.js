@@ -24,13 +24,13 @@ export default async function handler(req, res) {
     }
 
     // ✅ Read encrypted fields directly from req.body.data
-    const { ivhex, pub, data: ciphertext } = data || {};
+    const { iv_hex, pub, data: ciphertext } = data || {};
 
-    if (!ivhex || !pub || !ciphertext) {
+    if (!iv_hex || !pub || !ciphertext) {
       console.log("Incoming body (debug):", JSON.stringify(req.body, null, 2));
       return res
         .status(400)
-        .json({ error: "Missing ivhex, pub, or data in request body" });
+        .json({ error: "Missing iv_hex, pub, or data in request body" });
     }
 
     // ✅ Build AES-256-CFB decryption key
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const decryptionKey = pub + apiKeyPrefix;
 
     // ✅ Convert IV from hex to bytes
-    const iv = Buffer.from(ivhex, "hex");
+    const iv = Buffer.from(iv_hex, "hex");
 
     // ✅ Perform AES decryption
     let decryptedText;
