@@ -2,13 +2,8 @@ import crypto from "crypto";
 
 export default async function handler(req, res) {
   try {
-    // ✅ 1. Allow only POST requests
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
-
-    // ✅ 2. Extract credentials (UniFi sends them inside RequestHeaders)
-    const { RequestHeaders, Content } = req.body || {};
+    // ✅ Extract credentials (UniFi sends them inside RequestHeaders)
+    const { RequestHeaders, data } = req.body || {};
 
     const apiKeyFromBody = RequestHeaders?.["x-api-key"];
     const apiSecretFromBody = RequestHeaders?.["x-api-secret"];
@@ -16,7 +11,7 @@ export default async function handler(req, res) {
     const apiKey = apiKeyFromBody || process.env.FIRS_API_KEY;
     const apiSecret = apiSecretFromBody || process.env.FIRS_CLIENT_SECRET;
 
-    // ✅ 3. Validate credentials (must match your Vercel environment values)
+    // ✅ Validate credentials
     if (!apiKey || !apiSecret) {
       return res.status(401).json({ error: "Missing API credentials" });
     }
@@ -28,39 +23,24 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "Unauthorized request" });
     }
 
-    // ✅ 4. Parse FIRS Content string (UniFi sends as plain stringified JSON)
-    if (!Content) {
-      return res.status(400).json({ error: "Missing Content field" });
-    }
+    // ✅ Read encrypted fields directly from req.body.data
+    const { ivhex, pub, data: ciphertext } = data || {};
 
-    let parsedContent;
-    try {
-      parsedContent = typeof Content === "string" ? JSON.parse(Content) : Content;
-    } catch (err) {
-      return res.status(400).json({ error: "Invalid JSON in Content" });
-    }
-
-    // ✅ 5. Extract FIRS encrypted data fields
-    const firsData = parsedContent.data || {};
-    const ivHex = firsData.iv_hex;
-    const pub = firsData.pub;
-    const ciphertext = firsData.data; // the Base64 URL encoded ciphertext
-
-    if (!ivHex || !pub || !ciphertext) {
+    if (!ivhex || !pub || !ciphertext) {
+      console.log("Incoming body (debug):", JSON.stringify(req.body, null, 2));
       return res
         .status(400)
-        .json({ error: "Missing iv_hex, pub, or ciphertext in FIRS data" });
+        .json({ error: "Missing ivhex, pub, or data in request body" });
     }
 
-    // ✅ 6. Build AES-256-CFB decryption key
-    // Combine pub + first UUID section of the API key
+    // ✅ Build AES-256-CFB decryption key
     const apiKeyPrefix = process.env.FIRS_API_KEY.split("-")[0];
     const decryptionKey = pub + apiKeyPrefix;
 
-    // ✅ 7. Convert IV from hex to bytes
-    const iv = Buffer.from(ivHex, "hex");
+    // ✅ Convert IV from hex to bytes
+    const iv = Buffer.from(ivhex, "hex");
 
-    // ✅ 8. Perform AES decryption
+    // ✅ Perform AES decryption
     let decryptedText;
     try {
       const decipher = crypto.createDecipheriv(
@@ -74,18 +54,20 @@ export default async function handler(req, res) {
       ]);
       decryptedText = decrypted.toString("utf8");
     } catch (err) {
-      return res.status(500).json({ error: "Decryption failed", details: err.message });
+      return res
+        .status(500)
+        .json({ error: "Decryption failed", details: err.message });
     }
 
-    // ✅ 9. Attempt to parse decrypted text as JSON
+    // ✅ Attempt to parse decrypted text as JSON
     let decryptedJson;
     try {
       decryptedJson = JSON.parse(decryptedText);
     } catch {
-      decryptedJson = decryptedText; // fallback to plain text if not JSON
+      decryptedJson = decryptedText; // fallback if not JSON
     }
 
-    // ✅ 10. Return the decrypted response
+    // ✅ Return success
     return res.status(200).json({
       success: true,
       message: "Decryption successful",
