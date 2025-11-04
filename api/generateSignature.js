@@ -5,7 +5,7 @@ export default async function handler(req, res) {
     // --- 1️⃣ Get secret from Vercel environment ---
     const clientSecret = process.env.E_CLIENT_SECRET;
     if (!clientSecret) {
-      return res.status(400).json({ error: "Missing CLIENT_SECRET env variable" });
+      return res.status(400).json({ error: "Missing E_CLIENT_SECRET env variable" });
     }
 
     // --- 2️⃣ Prepare payload ---
@@ -24,15 +24,17 @@ export default async function handler(req, res) {
       .toISOString()
       .replace(/\.\d{3}Z$/, "+01:00");
 
-    // --- 4️⃣ Create message and signature ---
+    // --- 4️⃣ Create message and signature (Node native) ---
     const message = payload + isoUtc;
-    const hash = crypto.HmacSHA256(message, clientSecret);
-    const signature = crypto.enc.Base64.stringify(hash);
+    const hash = crypto
+      .createHmac("sha256", clientSecret)
+      .update(message)
+      .digest("base64");
 
     // --- 5️⃣ Return to UniFi ---
     return res.status(200).json({
       success: true,
-      signature,
+      signature: hash,
       timestamp: {
         UNIX: unixTimestamp,
         ISO_UTC: isoUtc,
