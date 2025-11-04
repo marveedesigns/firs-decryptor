@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       .replace(/\.\d{3}Z$/, "+01:00");
 
     // --- 4️⃣ Create message and signature (Node native) ---
-    const message = payload + isoUtc;
+    const message = payload + plus1;
     const hash = crypto
       .createHmac("sha256", clientSecret)
       .update(message)
