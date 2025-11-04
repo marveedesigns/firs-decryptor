@@ -26,8 +26,8 @@ export default async function handler(req, res) {
 
     // --- 4️⃣ Create message and signature ---
     const message = payload + isoUtc;
-    const hash = CryptoJS.HmacSHA256(message, clientSecret);
-    const signature = CryptoJS.enc.Base64.stringify(hash);
+    const hash = crypto.HmacSHA256(message, clientSecret);
+    const signature = crypto.enc.Base64.stringify(hash);
 
     // --- 5️⃣ Return to UniFi ---
     return res.status(200).json({
