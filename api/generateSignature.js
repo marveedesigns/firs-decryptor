@@ -1,32 +1,39 @@
+export const config = {
+  api: {
+    bodyParser: false, // ✅ Prevent auto-parsing so we can get exact raw body
+  },
+};
+
 import crypto from "crypto";
 
 export default async function handler(req, res) {
   try {
-    // ✅ Get client secret from environment variable
     const clientSecret = process.env.E_CLIENT_SECRET;
     if (!clientSecret) {
-      return res.status(400).json({ error: "Missing E_CLIENT_SECRET env variable" });
+      return res.status(400).json({ error: "Missing CLIENT_SECRET env variable" });
     }
 
-    // ✅ Build timestamp
+    // ✅ Read raw body (exact string Postman would sign)
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const rawBody = Buffer.concat(chunks).toString("utf8").trim();
+
+    // ✅ Generate timestamp (same format as Postman)
     const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
-    // ✅ Get raw request body (payload)
-    const payload = req.body ? JSON.stringify(req.body).trim() : "";
+    // ✅ Build message and compute signature
+    const message = rawBody + timestamp;
+    const signature = crypto
+      .createHmac("sha256", clientSecret)
+      .update(message)
+      .digest("base64");
 
-    // ✅ Create message = payload + timestamp
-    const message = payload + timestamp;
-
-    // ✅ Generate HMAC SHA256 signature
-    const hash = crypto.createHmac("sha256", clientSecret)
-                       .update(message)
-                       .digest("base64");
-
-    // ✅ Example: respond or use signature in verification
+    // ✅ Return both values for testing or downstream use
     return res.status(200).json({
       timestamp,
-      signature: hash,
-      message,
+      signature,
     });
   } catch (err) {
     console.error("Error:", err);
