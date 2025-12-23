@@ -8,5 +8,21 @@
     "dev": "vercel dev"
   },
   "type": "module",
-  "license": "ISC"
+  "license": "ISC",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marveedesigns/firs-decryptor.git"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/marveedesigns/firs-decryptor/issues"
+  },
+  "homepage": "https://github.com/marveedesigns/firs-decryptor#readme",
+  "description": "",
+  "dependencies": {
+    "jimp": "^1.6.0",
+    "qrcode-reader": "^1.0.4"
+  }
 }
