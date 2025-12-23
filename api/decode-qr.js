@@ -1,3 +1,9 @@
+export const config = {
+  api: {
+    bodyParser: false, // ✅ Prevent auto-parsing so we can get exact raw body
+  },
+};
+
 // api/decode-qr.js
 import decodeQRFromBase64 from "../lib/decodeQr.js";
 
